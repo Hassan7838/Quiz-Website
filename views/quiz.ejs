@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Quiz</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <style>
+input, textarea {
+  width: 100%;
+  padding: 12px;
+  margin-bottom: 10px;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+}
+button {
+  cursor: pointer;
+}
+form {
+  margin-top: 20px;
+}
+.card {
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+.card:hover {
+  transform: translateY(-8px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+}
+body {
+  animation: fadeIn 0.6s ease-in;
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+ </style>
+</head>
+<body onload="startQuiz()">
+  <div class="container my-5">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h3 id="quizTitle">Question 1 of 10</h3>
+      <div class="text-end fw-bold text-danger" id="timer">01:30</div>
+    </div>
+    <div class="progress mb-4" style="height: 20px;">
+      <div class="progress-bar" id="progressBar" role="progressbar" style="width: 10%;" aria-valuenow="10" aria-valuemin="0" aria-valuemax="100"></div>
+    </div>
+    <div class="card shadow">
+      <div class="card-body">
+        <h5 id="questionText">Loading question...</h5>
+        <div id="options" class="mt-3"></div>
+      </div>
+    </div>
+    <div class="d-flex justify-content-between mt-4">
+      <button id="prevBtn" onclick="prevQuestion()" class="btn btn-outline-secondary">Previous</button>
+      <button id="nextBtn" onclick="nextQuestion()" class="btn btn-primary">Next</button>
+    </div>
+    <div class="text-center mt-4 fw-bold" id="result"></div>
+  </div>
+  <script>
+let questions = [];
+let current = 0;
+let selectedAnswers = [];
+let timePerQuestion = 30; // seconds
+let timeLeft = timePerQuestion;
+let timer;
+
+// Get topic from URL (e.g. ?topic=html)
+const topic = new URLSearchParams(window.location.search).get("topic") || "html";
+
+// Elements
+const questionText = document.getElementById("questionText");
+const optionsBox = document.getElementById("options");
+const result = document.getElementById("result");
+const timerDisplay = document.getElementById("timer");
+const progressBar = document.getElementById("progressBar");
+const quizTitle = document.getElementById("quizTitle");
+const prevBtn = document.getElementById("prevBtn");
+const nextBtn = document.getElementById("nextBtn");
+
+function startQuiz() {
+  fetch(`http://localhost:3000/api/questions/${topic}`)
+    .then(res => res.json())
+    .then(data => {
+      questions = data;
+      selectedAnswers = new Array(questions.length).fill(null);
+      displayQuestion();
+    });
+}
+
+function displayQuestion() {
+  clearInterval(timer);
+  timeLeft = timePerQuestion;
+  updateTimer();
+  timer = setInterval(countdown, 1000);
+  const q = questions[current];
+  questionText.textContent = q.question;
+  quizTitle.textContent = `Question ${current + 1} of ${questions.length}`;
+  progressBar.style.width = `${((current + 1) / questions.length) * 100}%`;
+  progressBar.setAttribute("aria-valuenow", (current + 1) * 10);
+  optionsBox.innerHTML = "";
+  q.options.forEach((opt, i) => {
+    const radioId = `q${current}_opt${i}`;
+    const isChecked = selectedAnswers[current] === i ? "checked" : "";
+    optionsBox.innerHTML += `
+      <div class="form-check">
+        <input class="form-check-input" type="radio" name="question" id="${radioId}" value="${i}" ${isChecked}>
+        <label class="form-check-label" for="${radioId}">${opt}</label>
+      </div>
+    `;
+  });
+  prevBtn.disabled = current === 0;
+  nextBtn.textContent = current === questions.length - 1 ? "Submit" : "Next";
+}
+
+function countdown() {
+  timeLeft--;
+  updateTimer();
+  if (timeLeft === 0) {
+    saveAnswer();
+    nextQuestion();
+  }
+}
+
+function updateTimer() {
+  const minutes = String(Math.floor(timeLeft / 60)).padStart(2, "0");
+  const seconds = String(timeLeft % 60).padStart(2, "0");
+  timerDisplay.textContent = `${minutes}:${seconds}`;
+}
+
+function saveAnswer() {
+  const selected = document.querySelector('input[name="question"]:checked');
+  selectedAnswers[current] = selected ? parseInt(selected.value) : null;
+}
+
+function nextQuestion() {
+  saveAnswer();
+  if (current === questions.length - 1) {
+    submitQuiz();
+  } else {
+    current++;
+    displayQuestion();
+  }
+}
+
+function prevQuestion() {
+  saveAnswer();
+  if (current > 0) {
+    current--;
+    displayQuestion();
+  }
+}
+
+function submitQuiz() {
+  clearInterval(timer);
+  fetch(`http://localhost:3000/api/submit/${topic}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ answers: selectedAnswers })
+  })
+    .then(res => res.json())
+    .then(data => {
+   // Save score to localStorage
+  localStorage.setItem("quizScore", data.score);
+  localStorage.setItem("quizTotal", questions.length);
+   // Redirect to result page
+  location.href = "/result";
+  });
+}
+  </script>
+</body>
+</html>
